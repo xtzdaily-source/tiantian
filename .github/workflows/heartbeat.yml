@@ -1,0 +1,70 @@
+name: Random heartbeat
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: heartbeat-pr-1
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Comment when the deterministic random delay has elapsed
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const crypto = require('crypto');
+            const { owner, repo } = context.repo;
+            const pullNumber = 1;
+
+            const { data: pull } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+
+            if (pull.state !== 'open') {
+              core.info('PR #1 is closed; nothing to do.');
+              return;
+            }
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: pullNumber, per_page: 100 },
+            );
+
+            const heartbeats = comments
+              .filter((comment) => comment.body === 'HEARTBEAT')
+              .sort((a, b) =>
+                Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id,
+              );
+
+            const previous = heartbeats.at(-1);
+            const anchorId = previous?.id ?? pull.id;
+            const anchorTime = previous?.created_at ?? pull.created_at;
+            const seed = `${anchorId}:${anchorTime}`;
+            const hash = crypto.createHash('sha256').update(seed).digest();
+            const delayMinutes = ((hash.readUInt32BE(0) % 12) + 1) * 5;
+            const dueAt = Date.parse(anchorTime) + delayMinutes * 60_000;
+
+            if (Date.now() < dueAt) {
+              core.info(`Next heartbeat is due after ${delayMinutes} minutes.`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pullNumber,
+              body: 'HEARTBEAT',
+            });
