@@ -9,7 +9,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: heartbeat-pr-1
+  group: heartbeat-pr-2
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
           script: |
             const crypto = require('crypto');
             const { owner, repo } = context.repo;
-            const pullNumber = 1;
+            const pullNumber = 2;
 
             const { data: pull } = await github.rest.pulls.get({
               owner,
@@ -33,7 +33,7 @@ jobs:
             });
 
             if (pull.state !== 'open') {
-              core.info('PR #1 is closed; nothing to do.');
+              core.info('PR #2 is closed; nothing to do.');
               return;
             }
 
